@@ -1,87 +1,70 @@
-; crypto.asm
-; Simple XOR-based encryption/decryption program for Linux x86_64
-; Uses NASM syntax
+section .bss
+    input_buffer resb 100        ; user input
+    encrypted_buffer resb 100    ; encrypted result
 
 section .data
-    prompt_msg db "Enter string to encrypt/decrypt: ", 0
-    prompt_len equ $ - prompt_msg
-    key_prompt db "Enter single character key: ", 0
-    key_len equ $ - key_prompt
-    result_msg db "Result: ", 0
-    result_len equ $ - result_msg
-    newline db 10, 0
-    buffer times 256 db 0 ; Buffer for input string
-    key_buffer db 0       ; Buffer for key
-    BUFSIZE equ 256
+    newline db 10
+    newline_len equ 1
+    xor_key db 0x42              ; encryption key
 
 section .text
-global _start
+    global _start
 
 _start:
-    ; Print prompt for string
-    mov rax, 1          ; sys_write
-    mov rdi, 1          ; stdout
-    mov rsi, prompt_msg
-    mov rdx, prompt_len
-    syscall
-
-    ; Read input string
-    mov rax, 0          ; sys_read
+    ; --- Read input from stdin ---
+    mov rax, 0          ; syscall: read
     mov rdi, 0          ; stdin
-    mov rsi, buffer
-    mov rdx, BUFSIZE
+    mov rsi, input_buffer
+    mov rdx, 100
     syscall
-    mov rbx, rax        ; Save length of input string
+    mov rcx, rax        ; rcx = length of input
 
-    ; Print prompt for key
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, key_prompt
-    mov rdx, key_len
-    syscall
+    ; --- Encrypt each byte with XOR ---
+    xor rbx, rbx        ; rbx = index
+    movzx r8, byte [xor_key]
 
-    ; Read single character key
-    mov rax, 0
-    mov rdi, 0
-    mov rsi, key_buffer
-    mov rdx, 1
-    syscall
+encrypt_loop:
+    cmp rbx, rcx
+    jge print_original
 
-    ; Perform XOR encryption/decryption
-    mov rcx, rbx        ; Length of input
-    mov rsi, buffer     ; Input buffer
-    mov al, [key_buffer]; Key
-    xor_loop:
-        cmp rcx, 1      ; Don't process newline
-        jle done
-        xor byte [rsi], al ; XOR operation
-        inc rsi
-        dec rcx
-        jmp xor_loop
+    mov al, [input_buffer + rbx] ; read input byte
+    mov dl, al
+    xor dl, r8b                  ; XOR with key
+    mov [encrypted_buffer + rbx], dl
 
-done:
-    ; Print result message
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, result_msg
-    mov rdx, result_len
+    inc rbx
+    jmp encrypt_loop
+
+; --- Print Original ---
+print_original:
+    mov rax, 1          ; syscall: write
+    mov rdi, 1          ; stdout
+    mov rsi, input_buffer
+    mov rdx, rcx        ; length
     syscall
 
-    ; Print result
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, buffer
-    mov rdx, rbx
-    syscall
-
-    ; Print newline
+    ; newline
     mov rax, 1
     mov rdi, 1
     mov rsi, newline
-    mov rdx, 1
+    mov rdx, newline_len
     syscall
 
-    ; Exit
-    mov rax, 60         ; sys_exit
-    mov rdi, 0          ; status 0
+; --- Print Encrypted ---
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, encrypted_buffer
+    mov rdx, rcx
+    syscall
+
+    ; newline
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, newline
+    mov rdx, newline_len
+    syscall
+
+; --- Exit program ---
+    mov rax, 60
+    xor rdi, rdi
     syscall
